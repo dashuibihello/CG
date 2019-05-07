@@ -31,10 +31,7 @@ void main()
     // diffuse 
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(lightPos - Position);
-    float diff = max(dot(norm, lightDir), 0.0);
-	if(diffIn != -1) {
-		diff = diffIn;
-	}
+    float diff = max(dot(norm, lightDir), diffIn);
     vec3 diffuse = diff * lightColor;
     
     // specular

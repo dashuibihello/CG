@@ -158,9 +158,8 @@ int main()
 	int isPhong = 1;
 	float ambientStrength = 0.1f;
 	float specularStrength = 0.5f;
-	float diff = 0.5f;
+	float diff = 0.0f;
 	int shininess = 32;
-	bool isDiffuse = false;
 	ImVec4 object(0.3f, 0.4f, 0.9f, 1.0f);
 	ImVec4 light(0.7f, 0.0f, 1.0f, 1.0f);
 
@@ -203,8 +202,6 @@ int main()
 
 			//diffuse因子调节
 			ImGui::SliderFloat("diff", &diff, 0, 1);
-			ImGui::SameLine();
-			ImGui::Checkbox("Diffuse", &isDiffuse);
 
 			//specular因子调节
 			ImGui::SliderFloat("specularStrength", &specularStrength, 0, 1);
@@ -217,9 +214,6 @@ int main()
 			}
 			else {
 				shaderProgram = gouraudProgram;
-			}
-			if (!isDiffuse) {
-				diff = -1;
 			}
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
