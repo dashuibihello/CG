@@ -1,6 +1,7 @@
 # 作业7
 ## 说明
 - 在本题中，将鼠标改变摄像机的方式更改为了在程序中按下右键进行移动，而不是之前直接将鼠标锁定在程序中就可以直接进行移动。
+- 由于报告为后写的原因，basic-1，bonus-1，bonus-2三题的代码相同，在一个文件夹中。
 
 ## Basic
 ### 1. 实现方向光源的Shadowing Mapping:
@@ -10,6 +11,7 @@
 
 #### 实现效果
 实现效果如以下三张图所示。这里参考了learnopengl网站的教程和其贴图，并且将光源设置为一个正方体以便观察其位置。
+
 ![](./1.PNG)
 ![](./2.PNG)
 ![](./3.PNG)
@@ -219,5 +221,59 @@ void main()
 
 ## Bonus:
 ### 1. 实现光源在正交/透视两种投影下的Shadowing Mapping
+在渲染深度贴图的时候，正交(Orthographic)和投影(Projection)矩阵之间有所不同。正交投影矩阵并不会将场景用透视图进行变形，所有视线/光线都是平行的，这使它对于定向光来说是个很好的投影矩阵。然而透视投影矩阵，会将所有顶点根据透视关系进行变形，结果因此而不同，如下所示。
+- 正交
+![](./4.PNG)
+- 透视
+![](./5.PNG)
 
 ### 2. 优化Shadowing Mapping (可结合References链接，或其他方法。优化方式越多越好，在报告里说明，有加分
+
+#### 悬浮
+使用阴影偏移的一个缺点是你对物体的实际深度应用了平移。偏移有可能足够大，以至于可以看出阴影相对实际物体位置的偏移，这个阴影失真叫做悬浮(Peter Panning)，因为物体看起来轻轻悬浮在表面之上（译注Peter Pan就是童话彼得潘，而panning有平移、悬浮之意，而且彼得潘是个会飞的男孩…）。我们可以使用一个叫技巧解决大部分的Peter panning问题：当渲染深度贴图时候使用正面剔除（front face culling）你也许记得在面剔除教程中OpenGL默认是背面剔除。我们要告诉OpenGL我们要剔除正面。
+``` c++
+glCullFace(GL_FRONT);
+renderScene(simpleDepthShader);
+glBindFramebuffer(GL_FRAMEBUFFER, 0);
+glCullFace(GL_BACK);
+```
+
+#### 采样过多
+我们宁可让所有超出深度贴图的坐标的深度范围是1.0，这样超出的坐标将永远不在阴影之中。我们可以储存一个边框颜色，然后把深度贴图的纹理环绕选项设置为GL_CLAMP_TO_BORDER：
+
+- main.cpp
+    ```c++
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    GLfloat borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    ```
+当一个点比光的远平面还要远时，它的投影坐标的z坐标大于1.0。这种情况下，GL_CLAMP_TO_BORDER环绕方式不起作用，因为我们把坐标的z元素和深度贴图的值进行了对比；它总是为大于1.0的z返回true。
+
+解决这个问题也很简单，只要投影向量的z坐标大于1.0，我们就把shadow的值强制设为0.0
+- cube.fs
+    ```glsl
+    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
+    if(projCoords.z > 1.0)
+        shadow = 0.0;
+    ```
+
+#### PCF
+如果你放大看阴影，阴影映射对解析度的依赖很快变得很明显。PCF（percentage-closer filtering），这是一种多个不同过滤方式的组合，它产生柔和阴影，使它们出现更少的锯齿块和硬边。核心思想是从深度贴图中多次采样，每一次采样的纹理坐标都稍有不同。每个独立的样本可能在也可能不再阴影中。所有的次生结果接着结合在一起，进行平均化，我们就得到了柔和阴影。
+
+一个简单的PCF的实现是简单的从纹理像素四周对深度贴图采样，然后把结果平均起来：
+- cube.fs
+    ```glsl
+    // PCF
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+    ```
